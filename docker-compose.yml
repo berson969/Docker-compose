@@ -1,0 +1,86 @@
+version: "3.9"
+
+volumes:
+  pgdata:
+  static:
+  media:
+
+services:
+  smart-home:
+    build: .
+    command: gunicorn smart_home.wsgi:application -b 0.0.0.0:8000
+    container_name: smart_home
+    volumes: 
+      - static:/home/smart_home/static
+      - media:/home/smart_home/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgresdb
+    env_file:
+      - ./.env
+
+  web:
+    build: ./nginx
+    container_name: web_nginx
+    volumes:
+      - static:/home/smart_home/static
+      - media:/home/smart_home/media
+    ports:
+      - "80:80"
+    environment:
+      - NGINX_HOST=127.0.0.1
+      - NGINX_PORT=80
+    depends_on:
+      - postgresdb
+      - smart-home
+
+
+
+  postgresdb:
+    image: postgres:15.1-alpine
+    container_name: postgresDB
+    environment:
+      POSTGRES_DB: "${DB_NAME}"
+      POSTGRES_USER: "${DB_USER}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "5432:5432"
+    env_file:
+      - ./.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 15s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ./smart_home:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+      - ./logs:/var/log
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4:6.15
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin1@yandex.ru"
+      PGADMIN_DEFAULT_PASSWORD: "admin1pwd"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - ./pgadmin:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+
